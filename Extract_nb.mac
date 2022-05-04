@@ -1,0 +1,169 @@
+/* [wxMaxima: input   start ] */
+matsize(A) := [length(A), length(transpose(A))] $
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+check_row(r) := block( [tmp], tmp : true, for i : 1 while i <= length(r) do tmp : tmp and is (r[i] = [0]), return(tmp))$
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+/* Фунция для исключения переменных */
+del_eq(A, r, c) := block([U], U : ident(length(A)), 
+    A : columnswap(A, c, length(A)),
+    A : rowswap(A, r, length(A)),
+    for i : 1 while i < length(U) do     
+    if is (A[length(A), length(A)] = 0) then U[i, length(A)] : 0 else U[i, length(A)] : - (A[length(A), length(A)])^(-1) * A[i, length(A)],
+    A : U.A,
+    A : columnswap(A, c, length(A)),
+    A : rowswap(A, r, length(A)),
+    return(A)
+)$
+/* [wxMaxima: input   end   ] */
+
+
+/* [wxMaxima: input   start ] */
+extract(A, B, y_all, y_sel) := block( 
+    [A1, A1_tmp, A0, A0_tmp, y, y_s, 
+        alg_list, alg_list_tmp, used_eq, order_var, y_tmp, T, D1, D2, filler],
+
+A1 : A,
+A0 : B,
+y : y_all,
+y_s :  y_sel,
+    
+/* Cоздание y_r - списка невыделенных переменных. */
+y_r : makelist(i, i, 1, length(A1)),
+for i : 1 while i <= length(y_s) do y_r : delete(y_s[i], y_r),
+
+/* alg_list - список индексов строк - алгебраических уравнений*/
+alg_list : [],
+for i : 1 while i <= length(A1) do block( if check_row(transpose(A1[i])) then alg_list : append(alg_list, [i]) ),
+    
+/* Исключение неизвестных из всех уравнений:*/
+alg_list_tmp : alg_list,
+for i : 1 while i <= length(alg_list) do block (
+    for j : 1 while j <= length(y_r) do block(
+        [tmp, filler],
+        tmp : A0[alg_list[i], y_r[j]],
+        filler : makelist(0, i, length(transpose(A0))),
+        if tmp # 0
+        then block(
+            A1 : del_eq(A1, alg_list[i], y_r[j]), 
+            A0 : del_eq(A0, alg_list[i], y_r[j]), 
+            A1[alg_list[i]] : filler,  
+            A0[alg_list[i]] : filler,
+            alg_list_tmp : delete(alg_list[i], alg_list_tmp),
+            y : delete( part(y, y_r[j]), y)
+        )
+    )
+),
+alg_list : alg_list_tmp,
+
+/* Второй этап */
+alg_list_tmp : alg_list,
+used_eq : matrix(),
+order_var : [],
+y_tmp : y,
+
+for i : 1 while i <= length(alg_list) do block (
+    for j : 1 while j <= length(y_s) do block(
+        [tmp, filler],
+        tmp : A0[alg_list[i], y_s[j]],
+        filler : makelist(0, i, length(transpose(A0))),
+        if tmp # 0
+        then block( 
+            used_eq : addrow(used_eq, A0[ alg_list[i] ]),
+            A1 : del_eq(A1, alg_list[i], y_s[j]), 
+            A0 : del_eq(A0, alg_list[i], y_s[j]),
+            A1[alg_list[i]] : filler,  
+            A0[alg_list[i]] : filler,
+            alg_list_tmp : delete(alg_list[i], alg_list_tmp),
+            order_var : append(order_var, [ y_s[j] ]),
+            y_tmp : delete( part(y, y_s[j]) , y_tmp)
+        )
+    )
+),
+alg_list : alg_list_tmp,
+y : y_tmp,
+    
+/* Третий этап*/   
+T : matrix(),
+D1 : matrix(),
+D2 : matrix(),
+filler : makelist(0, i, length(y_s)),
+
+if is (length(used_eq) = length(y_s)) then T : addcol(T, filler)
+else block([T_tmp],
+    T : used_eq,
+    T_tmp : matrix(),
+    
+    for i :1 while i <= length(transpose(T)) do block(
+        [tmp],
+        tmp : col(T, i),
+        if is (member(i, y_s)) then T_tmp : addcol(T_tmp, tmp) else T_tmp : T_tmp
+    ),
+    T : T_tmp,
+    
+    for i : 1 while i <= length(order_var) do block(
+        T : columnswap(T, i, order_var[i])
+    ),
+    
+    for i : 1 while i <= length(T) do block(
+        [tmp],
+        tmp : col(T, i),
+        D1 : addcol(D1, tmp)
+    ),
+    
+    for i : length(T) + 1 while i <= length(transpose(T)) do block(
+        [tmp],
+        tmp : col(T, i),
+        D2 : addcol(D2, tmp)
+    ),
+    
+    if is (matsize(D2) = [0, 0]) then T : -invert(D1) 
+        else if matsize(D1) = [1, 1] and matsize(D2) = [1, 1] then T : -matrix([matrix([invert(D1)]).D2])
+            else T : -invert(D1).D2
+),
+
+/*Чистка матриц А0 и А1*/
+A1_tmp : matrix(),
+A0_tmp : matrix(),
+
+for i : 1 while i <= length(transpose(A1)) do block(
+        [tmp],
+        tmp : col(A1, i),
+        if check_row(tmp) then A1_tmp : A1_tmp else A1_tmp : addcol(A1_tmp, tmp)
+    ),
+A1 : A1_tmp,
+
+A1_tmp : matrix(),
+for i : 1 while i <= length(A1) do block(
+        [tmp],
+        tmp : row(A1, i),
+        if check_row(transpose(tmp)) then A1_tmp : A1_tmp else A1_tmp : addrow(A1_tmp, tmp)
+    ),
+A1 : A1_tmp,
+
+for i : 1 while i <= length(transpose(A0)) do block(
+        [tmp],
+        tmp : col(A0, i),
+        if check_row(tmp) then A0_tmp : A0_tmp else A0_tmp : addcol(A0_tmp, tmp)
+    ),
+A0 : A0_tmp,
+
+A0_tmp : matrix(),
+for i : 1 while i <= length(A0) do block(
+        [tmp],
+        tmp : row(A0, i),
+        if check_row(transpose(tmp)) then A0_tmp : A0_tmp else A0_tmp : addrow(A0_tmp, tmp)
+    ),
+A0 : A0_tmp,
+
+return([A1, A0, y, T])
+)$
+/* [wxMaxima: input   end   ] */
+
+
+
