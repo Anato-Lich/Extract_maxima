@@ -1,169 +1,172 @@
-/* [wxMaxima: input   start ] */
 matsize(A) := [length(A), length(transpose(A))] $
-/* [wxMaxima: input   end   ] */
 
-
-/* [wxMaxima: input   start ] */
 check_row(r) := block( [tmp], tmp : true, for i : 1 while i <= length(r) do tmp : tmp and is (r[i] = [0]), return(tmp))$
-/* [wxMaxima: input   end   ] */
 
+del_eq(A, B, r, c) := block([U, A1, A0, m], U : ident(length(A)), 
+    A1 : A,
+    A0 : B,
+    m : length(A),
+    
+    A1 : columnswap(A1, c, length(A1)),
+    A1 : rowswap(A1, r, length(A1)),
+    
+    A0 : columnswap(A0, c, length(A0)),
+    A0 : rowswap(A0, r, length(A0)),
+    
+    for i : 1 while i < length(U) do
+        for j : 1 while j <= length(U) do block[
+            A1[i, j] : A1[i, j] - A1[i, m]*A0[m, j]*(A0[m, m]^(-1)),
+        
+            A0[i, j] : A0[i, j] - A1[i, m]*diff(A0[m, j]*(A0[m, m]^(-1)), x)
+                        -A0[i, m]*A0[m, j]*(A0[m, m]^(-1))
+    ],
+    A1 : columnswap(A1, c, length(A1)),
+    A1 : rowswap(A1, r, length(A1)),
+    
+    A0 : columnswap(A0, c, length(A0)),
+    A0 : rowswap(A0, r, length(A0)),
+    return([A1, A0])
+)$
 
-/* [wxMaxima: input   start ] */
-/* Фунция для исключения переменных */
-del_eq(A, r, c) := block([U], U : ident(length(A)), 
-    A : columnswap(A, c, length(A)),
-    A : rowswap(A, r, length(A)),
-    for i : 1 while i < length(U) do     
-    if is (A[length(A), length(A)] = 0) then U[i, length(A)] : 0 else U[i, length(A)] : - (A[length(A), length(A)])^(-1) * A[i, length(A)],
-    A : U.A,
-    A : columnswap(A, c, length(A)),
-    A : rowswap(A, r, length(A)),
+clean_mat(M_inp, list_r, list_c) := block( [A_tmp, A],
+    A_tmp : matrix(),
+    A : M_inp,
+    
+   for i : 1 while i <= length(transpose(A)) do block(
+        [tmp],
+        tmp : col(A, i),
+        if is (member(i, list_c)) then A_tmp : A_tmp else A_tmp : addcol(A_tmp, tmp)
+    ),
+    A : A_tmp,
+    
+    A_tmp : matrix(),
+    for i : 1 while i <= length(A) do block(
+            [tmp],
+            tmp : row(A, i),
+            if is (member(i, list_r)) then A_tmp : A_tmp else A_tmp : addrow(A_tmp, tmp)
+        ),
+    A : A_tmp,
     return(A)
 )$
-/* [wxMaxima: input   end   ] */
 
 
-/* [wxMaxima: input   start ] */
 extract(A, B, y_all, y_sel) := block( 
-    [A1, A1_tmp, A0, A0_tmp, y, y_s, 
-        alg_list, alg_list_tmp, used_eq, order_var, y_tmp, T, D1, D2, filler],
+    [A1, A1_tmp, A0, A0_tmp, y, y_s, normal,
+        alg_list, alg_list_tmp, used_eq, order_var, y_tmp, T, D1, D2, filler,
+        used_eq_list, used_var],
 
-A1 : A,
-A0 : B,
-y : y_all,
-y_s :  y_sel,
-    
-/* Cоздание y_r - списка невыделенных переменных. */
-y_r : makelist(i, i, 1, length(A1)),
-for i : 1 while i <= length(y_s) do y_r : delete(y_s[i], y_r),
+  A1 : A,
+  A0 : B,
+  y : y_all,
+  y_s :  y_sel,
 
-/* alg_list - список индексов строк - алгебраических уравнений*/
-alg_list : [],
-for i : 1 while i <= length(A1) do block( if check_row(transpose(A1[i])) then alg_list : append(alg_list, [i]) ),
-    
-/* Исключение неизвестных из всех уравнений:*/
-alg_list_tmp : alg_list,
-for i : 1 while i <= length(alg_list) do block (
-    for j : 1 while j <= length(y_r) do block(
-        [tmp, filler],
-        tmp : A0[alg_list[i], y_r[j]],
-        filler : makelist(0, i, length(transpose(A0))),
-        if tmp # 0
-        then block(
-            A1 : del_eq(A1, alg_list[i], y_r[j]), 
-            A0 : del_eq(A0, alg_list[i], y_r[j]), 
-            A1[alg_list[i]] : filler,  
-            A0[alg_list[i]] : filler,
-            alg_list_tmp : delete(alg_list[i], alg_list_tmp),
-            y : delete( part(y, y_r[j]), y)
-        )
-    )
-),
-alg_list : alg_list_tmp,
 
-/* Второй этап */
-alg_list_tmp : alg_list,
-used_eq : matrix(),
-order_var : [],
-y_tmp : y,
+  y_r : makelist(i, i, 1, length(A1)),
+  for i:1 while i <= length(y_s) do y_r : delete(y_s[i], y_r),
 
-for i : 1 while i <= length(alg_list) do block (
-    for j : 1 while j <= length(y_s) do block(
-        [tmp, filler],
-        tmp : A0[alg_list[i], y_s[j]],
-        filler : makelist(0, i, length(transpose(A0))),
-        if tmp # 0
-        then block( 
-            used_eq : addrow(used_eq, A0[ alg_list[i] ]),
-            A1 : del_eq(A1, alg_list[i], y_s[j]), 
-            A0 : del_eq(A0, alg_list[i], y_s[j]),
-            A1[alg_list[i]] : filler,  
-            A0[alg_list[i]] : filler,
-            alg_list_tmp : delete(alg_list[i], alg_list_tmp),
-            order_var : append(order_var, [ y_s[j] ]),
-            y_tmp : delete( part(y, y_s[j]) , y_tmp)
-        )
-    )
-),
-alg_list : alg_list_tmp,
-y : y_tmp,
-    
-/* Третий этап*/   
-T : matrix(),
-D1 : matrix(),
-D2 : matrix(),
-filler : makelist(0, i, length(y_s)),
+  alg_list : [],
+  for i :1 while i <= length(A1) do block( if check_row(transpose(A1[i])) 
+    then alg_list : append(alg_list, [i]) ),
 
-if is (length(used_eq) = length(y_s)) then T : addcol(T, filler)
-else block([T_tmp],
-    T : used_eq,
-    T_tmp : matrix(),
-    
-    for i :1 while i <= length(transpose(T)) do block(
-        [tmp],
-        tmp : col(T, i),
-        if is (member(i, y_s)) then T_tmp : addcol(T_tmp, tmp) else T_tmp : T_tmp
-    ),
-    T : T_tmp,
-    
-    for i : 1 while i <= length(order_var) do block(
-        T : columnswap(T, i, order_var[i])
-    ),
-    
-    for i : 1 while i <= length(T) do block(
-        [tmp],
-        tmp : col(T, i),
-        D1 : addcol(D1, tmp)
-    ),
-    
-    for i : length(T) + 1 while i <= length(transpose(T)) do block(
-        [tmp],
-        tmp : col(T, i),
-        D2 : addcol(D2, tmp)
-    ),
-    
-    if is (matsize(D2) = [0, 0]) then T : -invert(D1) 
-        else if matsize(D1) = [1, 1] and matsize(D2) = [1, 1] then T : -matrix([matrix([invert(D1)]).D2])
-            else T : -invert(D1).D2
-),
 
-/*Чистка матриц А0 и А1*/
-A1_tmp : matrix(),
-A0_tmp : matrix(),
+  /*Исключение невыделенных неизвестных из всех уравнений:*/
 
-for i : 1 while i <= length(transpose(A1)) do block(
-        [tmp],
-        tmp : col(A1, i),
-        if check_row(tmp) then A1_tmp : A1_tmp else A1_tmp : addcol(A1_tmp, tmp)
-    ),
-A1 : A1_tmp,
+  alg_list_tmp : alg_list,
+  used_eq_list : [],
+  used_var : [],
+  filler : makelist(0, i, length(transpose(A0))),
+  
+  for i : 1 while i <= length(alg_list) do block (
+      for j : 1 while j <= length(y_r) do block(
+          [tmp],
+          tmp : A0[alg_list[i], y_r[j]],
+          if tmp # 0
+          then block(
+              used_eq_list : append(used_eq_list, [ alg_list[i] ]),
+              used_var : append(used_var, [ y_r[j] ]),
+              
+              [A1, A0] : del_eq(A1, A0, alg_list[i], y_r[j]), 
+              
+              A1[alg_list[i]] : filler,  
+              A0[alg_list[i]] : filler,
+              alg_list_tmp : delete(alg_list[i], alg_list_tmp),
+              y : delete( part(y, y_r[j]), y)
+          )
+      )
+  ),
+  
+  alg_list : alg_list_tmp,
+  alg_list_tmp : alg_list,
+  used_eq : matrix(),
+  order_var : [],
+  y_tmp : y,
+  filler : makelist(0, i, length(transpose(A0))),
 
-A1_tmp : matrix(),
-for i : 1 while i <= length(A1) do block(
-        [tmp],
-        tmp : row(A1, i),
-        if check_row(transpose(tmp)) then A1_tmp : A1_tmp else A1_tmp : addrow(A1_tmp, tmp)
-    ),
-A1 : A1_tmp,
+  for i : 1 while i <= length(alg_list) do block (
+      for j : 1 while j <= length(y_s) do block(
+          [tmp],
+          tmp : A0[alg_list[i], y_s[j]],
+          if tmp # 0
+          then block( 
+              used_eq : addrow(used_eq, A0[ alg_list[i] ]),
+              used_var : append(used_var, [ y_s[j] ]),
+              used_eq_list : append(used_eq_list, [ alg_list[i] ]),
+              
+              [A1, A0] : del_eq(A1, A0, alg_list[i], y_s[j]), 
+              
+              A1[alg_list[i]] : filler,  
+              A0[alg_list[i]] : filler,
+              alg_list_tmp : delete(alg_list[i], alg_list_tmp),
+              order_var : append(order_var, [ y_s[j] ]),
+              y_tmp : delete( part(y, y_s[j]) , y_tmp)
+          )
+      )
+  ),
 
-for i : 1 while i <= length(transpose(A0)) do block(
-        [tmp],
-        tmp : col(A0, i),
-        if check_row(tmp) then A0_tmp : A0_tmp else A0_tmp : addcol(A0_tmp, tmp)
-    ),
-A0 : A0_tmp,
+  alg_list : alg_list_tmp,
+  y : y_tmp,
+  A1 : clean_mat(A1, used_eq_list, used_var),
+  A0 : clean_mat(A0, used_eq_list, used_var),
 
-A0_tmp : matrix(),
-for i : 1 while i <= length(A0) do block(
-        [tmp],
-        tmp : row(A0, i),
-        if check_row(transpose(tmp)) then A0_tmp : A0_tmp else A0_tmp : addrow(A0_tmp, tmp)
-    ),
-A0 : A0_tmp,
 
-return([A1, A0, y, T])
+  T : matrix(),
+  D1 : matrix(),
+  D2 : matrix(),
+  filler : makelist(0, i, length(y_s)),
+
+  if is (length(used_eq) = length(y_s)) then T : addcol(T, filler)
+  else block([T_tmp],
+      T : used_eq,
+      T_tmp : matrix(),
+      for i :1 while i <= length(transpose(T)) do block(
+          [tmp],
+          tmp : col(T, i),
+          if is (member(i, y_s)) then T_tmp : addcol(T_tmp, tmp) else T_tmp : T_tmp
+      ),
+      T : T_tmp,
+      for i : 1 while i <= length(order_var) do block(
+          T : columnswap(T, i, order_var[i])
+      ),
+      for i : 1 while i <= length(T) do block(
+          [tmp],
+          tmp : col(T, i),
+          D1 : addcol(D1, tmp)
+      ),
+      for i : length(T) + 1 while i <= length(transpose(T)) do block(
+          [tmp],
+          tmp : col(T, i),
+          D2 : addcol(D2, tmp)
+      ),
+      if is (matsize(T) = [0, 0]) then T : 0
+      else
+        if is (matsize(D2) = [0, 0]) then T : -invert(D1) 
+            else if matsize(D1) = [1, 1] and matsize(D2) = [1, 1] then T : -matrix([matrix([invert(D1)]).D2])
+                else T : -invert(D1).D2
+  ),
+  
+  normal : -invert(A1).A0,
+  normal : ratsimp(normal),
+  
+  
+  return( [A1, A0, y, T, normal] )
 )$
-/* [wxMaxima: input   end   ] */
-
-
-
